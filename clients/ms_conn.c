@@ -2627,9 +2627,13 @@ static void ms_drive_machine(ms_conn_t *c)
           c->ctnwrite= false;
           break;
         }
-        ms_conn_set_state(c, conn_read);
+	  /*
+         * ms_conn_set_state(c, conn_read);
+         * c->ctnwrite= false;
+         * stop= true;
+	   */
+        ms_conn_set_state(c, conn_closing);
         c->ctnwrite= false;
-        stop= true;
         break;
 
       case TRANSMIT_INCOMPLETE:
