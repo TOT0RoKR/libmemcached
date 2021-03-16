@@ -782,7 +782,7 @@ static int ms_network_connect(ms_conn_t *c,
   int sfd;
   struct linger ling=
   {
-    0, 0
+    1, 0
   };
   struct addrinfo *ai;
   struct addrinfo *next;
@@ -921,9 +921,11 @@ static int ms_reconn(ms_conn_t *c)
       % srv_conn_cnt == 0)
   {
     gettimeofday(&ms_setting.servers[srv_idx].disconn_time, NULL);
-    fprintf(stderr, "Server %s:%d disconnect\n",
-            ms_setting.servers[srv_idx].srv_host_name,
-            ms_setting.servers[srv_idx].srv_port);
+    /*
+     * fprintf(stderr, "Server %s:%d disconnect\n",
+     *         ms_setting.servers[srv_idx].srv_host_name,
+     *         ms_setting.servers[srv_idx].srv_port);
+     */
   }
 
   if (ms_setting.rep_write_srv > 0)
@@ -962,9 +964,11 @@ static int ms_reconn(ms_conn_t *c)
             (int)(ms_setting.servers[srv_idx].reconn_time.tv_sec
                   - ms_setting.servers[srv_idx].disconn_time
                      .tv_sec);
-          fprintf(stderr, "Server %s:%d reconnect after %ds\n",
-                  ms_setting.servers[srv_idx].srv_host_name,
-                  ms_setting.servers[srv_idx].srv_port, reconn_time);
+	    /*
+	     * fprintf(stderr, "Server %s:%d reconnect after %ds\n",
+	     *         ms_setting.servers[srv_idx].srv_host_name,
+	     *         ms_setting.servers[srv_idx].srv_port, reconn_time);
+	     */
         }
         break;
       }
@@ -972,7 +976,7 @@ static int ms_reconn(ms_conn_t *c)
       if (ms_setting.rep_write_srv == 0 && c->total_sfds > 0)
       {
         /* wait a second and reconnect */
-        sleep(1);
+	  /* sleep(1); */
       }
     }
     while (ms_setting.rep_write_srv == 0 && c->total_sfds > 0);
@@ -1364,7 +1368,9 @@ static int ms_try_read_line(ms_conn_t *c)
       if (ms_bin_process_response(c) == 0)
       {
         /* current operation completed */
-        ms_reset_conn(c, false);
+		/* 이곳 바꿈 */
+	  /* ms_reset_conn(c, false); */
+	  ms_conn_set_state(c, conn_closing);
         return -1;
       }
       else
@@ -1401,7 +1407,9 @@ static int ms_try_read_line(ms_conn_t *c)
     if (ms_ascii_process_line(c, c->rcurr) == 0)
     {
       /* current operation completed */
-      ms_reset_conn(c, false);
+	    /* 이곳 바꿈 */
+	/* ms_reset_conn(c, false); */
+	ms_conn_set_state(c, conn_closing);
       return -1;
     }
     else
@@ -2518,33 +2526,48 @@ static void ms_drive_machine(ms_conn_t *c)
   bool stop= false;
 
   assert(c != NULL);
+	    // fprintf(stderr, "1");
 
   while (! stop)
   {
+	    /* fprintf(stderr, "2\n"); */
     switch (c->state)
     {
     case conn_read:
+	    // fprintf(stderr, "3");
       if (c->readval)
       {
+	    // fprintf(stderr, "4");
         if (c->rbytes >= c->rvbytes)
         {
+	    // fprintf(stderr, "5");
+	    /* fprintf(stderr, "c->readval.\n"); */
           ms_complete_nread(c);
           break;
         }
       }
       else
       {
+	    // fprintf(stderr, "6");
         if (ms_try_read_line(c) != 0)
         {
+	    // fprintf(stderr, "7");
+          /* fprintf(stderr, "ms_try_read_line.\n"); */
           break;
         }
       }
+	    // fprintf(stderr, "8");
 
       if (ms_try_read_network(c) != 0)
       {
+	    // fprintf(stderr, "9");
+          /* ms_conn_set_state(c, conn_closing); */
+          /* break; */
+        /* fprintf(stderr, "ms_try_read_network.\n"); */
         break;
       }
 
+	fprintf(stderr, "read fail.\n");
       /* doesn't read all the response data, wait event wake up */
       if (! c->currcmd.isfinish)
       {
@@ -2554,33 +2577,41 @@ static void ms_drive_machine(ms_conn_t *c)
           ms_conn_set_state(c, conn_closing);
           break;
         }
+	  fprintf(stderr, "isfinish.\n");
         stop= true;
         break;
       }
 
       /* we have no command line and no data to read from network, next write */
-      ms_conn_set_state(c, conn_write);
+	ms_conn_set_state(c, conn_write);
+	/* ms_conn_set_state(c, conn_closing); */
       memcpy(&c->precmd, &c->currcmd, sizeof(ms_cmdstat_t));        /* replicate command state */
 
       break;
 
     case conn_write:
+	    // fprintf(stderr, "a");
       if (! c->ctnwrite && ms_need_yield(c))
       {
+	    // fprintf(stderr, "b");
         usleep(10);
 
         if (! ms_update_event(c, EV_WRITE | EV_PERSIST))
         {
+	    // fprintf(stderr, "c");
           fprintf(stderr, "Couldn't update event.\n");
           ms_conn_set_state(c, conn_closing);
           break;
         }
+	    // fprintf(stderr, "d");
         stop= true;
         break;
       }
 
+	    // fprintf(stderr, "e");
       if (! c->ctnwrite && (ms_exec_task(c) != 0))
       {
+	    // fprintf(stderr, "f");
         ms_conn_set_state(c, conn_closing);
         break;
       }
@@ -2595,9 +2626,11 @@ static void ms_drive_machine(ms_conn_t *c)
         ms_update_start_time(c);
       }
 
+	    // fprintf(stderr, "g");
       /* change sfd if necessary */
       if (c->change_sfd)
       {
+	    // fprintf(stderr, "h");
         c->ctnwrite= true;
         stop= true;
         break;
@@ -2606,8 +2639,10 @@ static void ms_drive_machine(ms_conn_t *c)
       /* execute task until nothing need be written to network */
       if (! c->ctnwrite && (c->msgcurr == c->msgused))
       {
+	    // fprintf(stderr, "i");
         if (! ms_update_event(c, EV_WRITE | EV_PERSIST))
         {
+	    // fprintf(stderr, "j");
           fprintf(stderr, "Couldn't update event.\n");
           ms_conn_set_state(c, conn_closing);
           break;
@@ -2616,40 +2651,45 @@ static void ms_drive_machine(ms_conn_t *c)
         break;
       }
 
+	    // fprintf(stderr, "k");
       switch (ms_transmit(c))
       {
       case TRANSMIT_COMPLETE:
+	    // fprintf(stderr, "l");
         /* we have no data to write to network, next wait repose */
         if (! ms_update_event(c, EV_READ | EV_PERSIST))
         {
+	    // fprintf(stderr, "m");
           fprintf(stderr, "Couldn't update event.\n");
           ms_conn_set_state(c, conn_closing);
           c->ctnwrite= false;
           break;
         }
-	  /*
-         * ms_conn_set_state(c, conn_read);
-         * c->ctnwrite= false;
-         * stop= true;
-	   */
-        ms_conn_set_state(c, conn_closing);
-        c->ctnwrite= false;
+	  ms_conn_set_state(c, conn_read);
+	  /* ms_conn_set_state(c, conn_closing); */
+	  c->ctnwrite= false;
+	  stop= true;
+        /* ms_reset_conn(c, false); */
         break;
 
       case TRANSMIT_INCOMPLETE:
+	    // fprintf(stderr, "n");
         c->ctnwrite= true;
         break;                           /* Continue in state machine. */
 
       case TRANSMIT_HARD_ERROR:
+	    // fprintf(stderr, "o");
         c->ctnwrite= false;
         break;
 
       case TRANSMIT_SOFT_ERROR:
+	    // fprintf(stderr, "p");
         c->ctnwrite= true;
         stop= true;
         break;
 
       default:
+	    // fprintf(stderr, "q");
         break;
       } /* switch */
 
@@ -2657,12 +2697,15 @@ static void ms_drive_machine(ms_conn_t *c)
 
     case conn_closing:
       /* recovery mode, need reconnect if connection close */
+	    // fprintf(stderr, "r");
       if (ms_setting.reconnect && (! ms_global.time_out
                                    || ((ms_setting.run_time == 0)
                                        && (c->remain_exec_num > 0))))
       {
+	    // fprintf(stderr, "s");
         if (ms_reconn(c) != 0)
         {
+	    // fprintf(stderr, "t");
           ms_conn_close(c);
           stop= true;
           break;
@@ -2672,6 +2715,7 @@ static void ms_drive_machine(ms_conn_t *c)
 
         if (c->total_sfds == 1)
         {
+	    // fprintf(stderr, "u");
           if (! ms_update_event(c, EV_WRITE | EV_PERSIST))
           {
             fprintf(stderr, "Couldn't update event.\n");
@@ -2679,20 +2723,26 @@ static void ms_drive_machine(ms_conn_t *c)
             break;
           }
         }
+	    // fprintf(stderr, "v");
 
         break;
       }
       else
       {
+	    // fprintf(stderr, "w");
         ms_conn_close(c);
         stop= true;
         break;
       }
+	    // fprintf(stderr, "x");
 
     default:
+	    // fprintf(stderr, "y");
       assert(0);
     } /* switch */
+	    // fprintf(stderr, "z");
   }
+	    // fprintf(stderr, "@");
 } /* ms_drive_machine */
 
 
